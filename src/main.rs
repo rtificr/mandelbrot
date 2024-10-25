@@ -64,8 +64,8 @@ fn set_pix(x: isize, y: isize, color: (u8, u8, u8), buf: &mut [u32]) {
 }
 
 fn mandelbrot(x: f64, y: f64, max_iter: usize) -> bool {
-    let mut z_real: f64 = 0.0;  // Real part of z
-    let mut z_imag: f64 = 0.0;  // Imaginary part of z
+    let mut z_real: f64 = 0.0;
+    let mut z_imag: f64 = 0.0;
     let mut z_mag_squared = 0.0;
     let c_real = x;
     let c_imag = y;
@@ -77,15 +77,11 @@ fn mandelbrot(x: f64, y: f64, max_iter: usize) -> bool {
             return true
         }
 
-        // Calculate the next z = z^2 + c
         let new_z_real = z_real * z_real - z_imag * z_imag + c_real ;
         let new_z_imag = 2.0 * z_real * z_imag + c_imag;
-
-        // Update z_real and z_imag for the next iteration
         z_real = new_z_real;
         z_imag = new_z_imag;
     }
 
-    // If we complete all iterations, we assume the point is in the Mandelbrot set
     false
 }
