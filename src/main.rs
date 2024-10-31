@@ -1,11 +1,15 @@
 use minifb::{Key, Window, WindowOptions};
+use rayon::prelude::*;
+use std::time::Instant;
 
-const WIDTH: usize = 1280;
-const HEIGHT: usize = 720;
+const WIDTH: usize = 2000 / 3;
+const HEIGHT: usize = 2000 / 3;
+const SUPERSAMPLE: usize = 2;
+const SAMPLES: usize = 2;
 
 fn main() {
     let mut buffer = [0u32; WIDTH * HEIGHT];
-    
+
     let mut window = Window::new(
         "Test - ESC to exit",
         WIDTH,
@@ -16,72 +20,87 @@ fn main() {
             panic!("{}", e);
         });
 
-    // Limit to max ~60 fps update rate
     window.set_target_fps(60);
 
-    mandelbrot_to_buf(&mut buffer, 1);
-
-    let mut iter = 1;
+    let mut iter = 10;
+    mandelbrot_to_buf(&mut buffer, iter);
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
+        if window.is_key_down(Key::Up) {
+            let now = Instant::now();
+            iter += 1;
+            mandelbrot_to_buf(&mut buffer, iter);
+            window.set_title(&format!(
+                "Mandelbrot - Iter: {} - Update time: {:.8}s",
+                iter,
+                now.elapsed().as_secs_f64()
+            ));
+        }
+        if window.is_key_down(Key::Down) {
+            let now = Instant::now();
+            if iter > 1 {
+                iter -= 1
+            };
+            mandelbrot_to_buf(&mut buffer, iter);
+            window.set_title(&format!(
+                "Mandelbrot - Iter: {} - Update time: {:.8}s",
+                iter,
+                now.elapsed().as_secs_f64()
+            ));
+        }
 
-        if window.is_key_pressed(Key::Up, minifb::KeyRepeat::No) {
-            iter += 2;
-            mandelbrot_to_buf(&mut buffer, iter);
-        }
-        if window.is_key_pressed(Key::Down, minifb::KeyRepeat::No) {
-            if iter > 2 { iter -= 2 };
-            mandelbrot_to_buf(&mut buffer, iter);
-        }
-        // We unwrap here as we want this code to exit if it fails. Real applications may want to handle this in a different way
-        window
-            .update_with_buffer(&buffer, WIDTH, HEIGHT)
-            .unwrap();
+        window.update_with_buffer(&buffer, WIDTH, HEIGHT).unwrap();
     }
 }
 
 fn mandelbrot_to_buf(buf: &mut [u32], max_iter: usize) {
-    for y in 0-HEIGHT as isize / 2..HEIGHT as isize / 2 {
-        for x in 0-WIDTH as isize / 2..WIDTH as isize / 2 {
-            let val =  mandelbrot(
-                x as f64 / (WIDTH as f64 / 4.0),
-                y as f64 / (HEIGHT as f64 / 4.0),
-                max_iter
-            );
-            set_pix(x, y, if val { (0, 0, 0) } else { (255,255,255) }, buf);
-        }
-    }
+    buf.par_chunks_mut(WIDTH).enumerate().for_each(|(y, row)| {
+        row.iter_mut().enumerate().for_each(|(x, pixel)| {
+            let mut total_val = 0.0;
+            let x_base = (x as isize - (WIDTH / 2) as isize) as f32 / (WIDTH as f32 / 4.0);
+            let y_base = (y as isize - (HEIGHT / 2) as isize) as f32 / (HEIGHT as f32 / 4.0);
+            for i in 0..SAMPLES {
+                for j in 0..SAMPLES {
+                    let x_offset = (i as f32 / SAMPLES as f32 - 0.5) / (WIDTH as f32 / 4.0);
+                    let y_offset = (j as f32 / SAMPLES as f32 - 0.5) / (HEIGHT as f32 / 4.0);
+                    total_val += mandelbrot(x_base + x_offset, y_base + y_offset, max_iter);
+                }
+            }
+            let avg_val = total_val / (SAMPLES * SAMPLES) as f32;
+            *pixel = ((avg_val * 255.0) as u8 as u32) << 16
+                | ((avg_val * 255.0) as u8 as u32) << 8
+                | (avg_val * 255.0) as u8 as u32;
+        });
+    });
 }
-
 fn set_pix(x: isize, y: isize, color: (u8, u8, u8), buf: &mut [u32]) {
     if x.abs() >= (WIDTH / 2) as isize || y.abs() >= (HEIGHT / 2) as isize {
         return;
     }
     let color = (color.0 as u32) << 16 | (color.1 as u32) << 8 | color.2 as u32;
-    buf[(
-        ((HEIGHT / 2) as isize + y) * WIDTH as isize + ((WIDTH / 2) as isize + x)
-    ) as usize] = color;
+    buf[(((HEIGHT / 2) as isize + y) * WIDTH as isize + ((WIDTH / 2) as isize + x)) as usize] =
+        color;
 }
 
-fn mandelbrot(x: f64, y: f64, max_iter: usize) -> bool {
-    let mut z_real: f64 = 0.0;
-    let mut z_imag: f64 = 0.0;
+fn mandelbrot(x: f32, y: f32, max_iter: usize) -> f32 {
+    let mut z_real: f32 = 0.0;
+    let mut z_imag: f32 = 0.0;
     let mut z_mag_squared = 0.0;
     let c_real = x;
     let c_imag = y;
 
-    for _ in 0..max_iter {
+    for i in 0..max_iter {
         z_mag_squared = z_real.powf(2.) + z_imag.powf(2.).abs();
 
         if z_mag_squared > 4.0 {
-            return true
+            return i as f32 / max_iter as f32;
         }
 
-        let new_z_real = z_real * z_real - z_imag * z_imag + c_real ;
+        let new_z_real = z_real * z_real - z_imag * z_imag + c_real;
         let new_z_imag = 2.0 * z_real * z_imag + c_imag;
         z_real = new_z_real;
         z_imag = new_z_imag;
     }
 
-    false
+    0.0
 }
