@@ -5,7 +5,7 @@ use std::time::Instant;
 const WIDTH: usize = 2000 / 3;
 const HEIGHT: usize = 2000 / 3;
 const SUPERSAMPLE: usize = 2;
-const SAMPLES: usize = 2;
+const SAMPLES: usize = 3;
 
 fn main() {
     let mut buffer = [0u32; WIDTH * HEIGHT];
